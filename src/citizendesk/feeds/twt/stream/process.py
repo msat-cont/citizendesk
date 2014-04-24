@@ -448,7 +448,7 @@ def do_patch_one(db, doc_id=None, data=None, force=None):
     if should_run:
         new_stream_url = doc['control']['streamer_url']
         connector = controller.NewstwisterConnector(new_stream_url)
-        res = connector.request_start('stream:' + str(doc_id), oauth_info['spec'], filter_spec)
+        res = connector.request_start(str(doc_id), oauth_info['spec'], filter_spec)
         if not res:
             return (False, 'can not start the stream')
         try:
