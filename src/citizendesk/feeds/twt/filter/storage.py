@@ -4,6 +4,7 @@
 #
 
 import datetime
+from bson.objectid import ObjectId
 
 try:
     unicode
@@ -15,9 +16,9 @@ collection = 'twt_filters'
 schema = {
     '_id': 1,
     'spec': {
-        'follow': [6253282],
-        'track': ['citizen desk', 'citizendesk'],
-        'locations': [{'west': -74, 'east': -73, 'south': 40, 'north': 41}],
+        'follow': ['sourcefabric'], # notice that this shall be translated into ids before sending to Newstwister, e.g. 121151264,
+        'track': ['citizen desk', '#citizendesk', '@sourcefabric'],
+        'locations': [{'name': 'New York', 'west': -74, 'east': -73, 'south': 40, 'north': 41}],
         'language': 'en'
     },
     'logs': {
@@ -32,6 +33,11 @@ def get_one(db, doc_id):
     '''
     if not db:
         return (False, 'inner application error')
+
+    try:
+        doc_id = ObjectId(doc_id)
+    except:
+        pass
 
     if type(doc_id) in [str, unicode]:
         if doc_id.isdigit():
