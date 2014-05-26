@@ -58,11 +58,62 @@ discarded: []
 SOURCE_START = 'https://twitter.com/'
 SOURCE_MIDDLE = '/status/'
 SOURCE_END = '/'
+RESOLVE_HOSTS = ['bit.ly', 'bitly.com']
+RESOLVE_TIMEOUT = 1
 
 import os, sys, datetime, json
+import urllib2
 from citizendesk.ingest.twt.connect import get_conf, gen_id, get_tweet
 
+class HeadRequest(urllib2.Request):
+    def get_method(self):
+        return 'HEAD'
+
+def _resolve_url(url):
+    last_url = url
+    last_host = None
+    last_type = None
+
+    for ind in range(12):
+        try:
+            request = urllib2.Request(last_url)
+            last_host = request.get_host()
+            last_type = request.get_type()
+
+            if last_host not in RESOLVE_HOSTS:
+                return last_url
+
+            opener = urllib2.OpenerDirector()
+            opener.add_handler(urllib2.HTTPHandler())
+            opener.add_handler(urllib2.HTTPSHandler())
+            opener.add_handler(urllib2.HTTPDefaultErrorHandler())
+            try:
+                res = opener.open(HeadRequest(last_url), timeout = RESOLVE_TIMEOUT)
+                res.close()
+            except urllib2.URLError, exc:
+                return last_url
+            except urllib2.HTTPError, exc:
+                return last_url
+
+            redirs = res.info().getheaders('location')
+            if not redirs:
+                return last_url
+
+            last_url = redirs[0]
+            if last_url.startswith('/'):
+                last_url = last_type + '://' + last_host + last_url
+        except:
+            return url
+
+    return url
+
 def _get_expanded_text(original_tweet):
+    if type(original_tweet) is not dict:
+        return ''
+
+    if 'text_expanded' in original_tweet:
+        return original_tweet['text_expanded']
+
     expanded_text = ''
 
     report_entities = original_tweet['entities']
@@ -78,7 +129,11 @@ def _get_expanded_text(original_tweet):
             for one_url_set in all_url_sets:
                 if one_url_set:
                     for one_url in one_url_set:
-                        replace_set[one_url['indices'][0]] = {'indices': one_url['indices'], 'url': one_url['expanded_url']}
+                        if 'resolved_url' in one_url:
+                            use_url = one_url['resolved_url']
+                        else:
+                            use_url = _resolve_url(one_url['expanded_url'])
+                        replace_set[one_url['indices'][0]] = {'indices': one_url['indices'], 'url': use_url}
             for key in sorted(replace_set.keys(), reverse=True):
                 link_data = replace_set[key]
                 report_text = report_text[:link_data['indices'][0]] + link_data['url'] + report_text[link_data['indices'][1]:]
@@ -120,6 +175,9 @@ def find_search_reason(criteria, expanded_text, authors, endorsers, recipients):
                 if not one_term:
                     continue
                 if str(one_term).lower() in expanded_text:
+                    reasons_track.append(one_term)
+                    continue
+                if str(one_term).lower() in tweet_authors:
                     reasons_track.append(one_term)
 
         if 'from' in criteria['query']:
@@ -254,6 +312,8 @@ def process_new_tweet(holder, tweet_id, tweet, channel_type, endpoint_id, reques
                 report['geolocations'] = [{'lon': coordinates[0], 'lat': coordinates[1]}]
 
         expanded_text = _get_expanded_text(tweet)
+        tweet['text_expanded'] = expanded_text
+
         report['texts'] = [{'original': expanded_text, 'transcript': None}]
 
         report_entities = tweet['entities']
