@@ -8,7 +8,9 @@ Citizen alias structure:
 _id/alias_id: String # globally unique for any report from any feed
 cId
 authority: String # to know how to deal with it
-#user_id: Integer or None # if a local user is a creator of this alias info
+created_by: Integer or None # if a local user is a creator of this alias info
+updated_by: Integer or None # if a local user is a creator of this alias info
+active: Bool # whether the citizen alias is used (or deactivated otherwise)
 
 #provider-based:
 identifiers(user_name, user_id)
@@ -22,7 +24,6 @@ description
 sources
 home_pages
 
-
 #local-edited:
 notable: Boolean
 reliable: Boolean
@@ -30,6 +31,10 @@ verified: Boolean
 places: List,
 comments: List,
 links: List,
+tags: List,
+
+#auto-generated on reports:
+tags_auto: List
 
 # logs
 produced: DateTime # when the user info came (SMS sender) or was created (tweet user)
@@ -39,6 +44,9 @@ modified: DateTime # last document modification
 # flags
 local: Boolean # if the alias was created by editors
 sensitive: Boolean # whether it shall be kept secrete
+
+# configuration
+config: {'type':'value'} # for storing citizen_alias-related configuration
 
 Citizen structure:
 
@@ -83,15 +91,6 @@ class CitizenHolder(object):
 
         return None
 
-    def gen_id(self, feed_type):
-
-        rnd_list = [str(hex(i))[-1:] for i in range(16)]
-        random.shuffle(rnd_list)
-        id_value = '' + feed_type + ':'
-        id_value += datetime.datetime.now().isoformat()
-        id_value += ':' + ''.join(rnd_list)
-        return id_value
-
     def get_const(self, name):
         known_names = {'unverified':UNVERIFIED}
         if name in known_names:
@@ -117,12 +116,16 @@ class CitizenHolder(object):
 
     def save_alias(self, alias_info):
         alias = self.create_alias(alias_info)
-        self.store_alias(alias)
-        return True
+        res = self.store_alias(alias)
+        return res
 
     def store_alias(self, document):
         collection = self.get_collection('aliases')
-        collection.save(document)
+        try:
+            alias_id = collection.save(document)
+        except:
+            return None
+        return alias_id
 
     def create_alias(self, alias_info):
         if type(alias_info) is not dict:
@@ -134,17 +137,18 @@ class CitizenHolder(object):
             if not alias_info[need_key]:
                 return None
 
-        current_timestap = datetime.datetime.now()
+        current_timestamp = datetime.datetime.now()
 
         alias = {
-            'change_id': 0, # TODO: get correct change id here!
+            #'change_id': 0, # TODO: get correct change id here!
             'authority': None,
+            'active': True,
             'identifiers': [],
             'avatars': [],
             'produced': None,
-            'created': current_timestap,
+            'created': current_timestamp,
             'name_first': None,
-            'name_flast': None,
+            'name_last': None,
             'name_full': None,
             'locations': [],
             'time_zone': None,
@@ -153,6 +157,8 @@ class CitizenHolder(object):
             'sources': [],
             'home_pages': [],
             'local': False,
+            'created_by': None,
+            'updated_by': None,
 
             'notable': None,
             'reliable': None,
@@ -160,18 +166,24 @@ class CitizenHolder(object):
             'places': [],
             'comments': [],
             'links': [],
-            'sensitive': None
+            'tags': [],
+            'tags_auto': [],
+            'sensitive': None,
+            'config': []
         }
 
         parts_scalar = [
             'authority',
+            'active',
             'produced',
             'name_first',
-            'name_flast',
+            'name_last',
             'name_full',
             'time_zone',
             'description',
-            'local'
+            'local',
+            'created_by',
+            'updated_by'
         ]
 
         parts_vector = [
@@ -181,12 +193,18 @@ class CitizenHolder(object):
             'languages',
             'sources',
             'home_pages',
-            'links'
+            'links',
+            'tags',
+            'tags_auto'
+        ]
+
+        parts_dict = [
+            'config'
         ]
 
         for key in parts_scalar:
             if key in alias_info:
-                if alias_info[key]:
+                if alias_info[key] is not None:
                     alias[key] = alias_info[key]
 
         for key in parts_vector:
@@ -194,8 +212,16 @@ class CitizenHolder(object):
                 if type(alias_info[key]) not in [list, tuple]:
                     continue
                 for one_value in alias_info[key]:
-                    if one_value:
+                    if one_value is not None:
                         alias[key].append(one_value)
+
+        for key in parts_dict:
+            if key in alias_info:
+                if type(alias_info[key]) is not dict:
+                    continue
+                for one_key in alias_info[key]:
+                    if alias_info[key][one_key] is not None:
+                        alias[key][one_key] = alias_info[key][one_key]
 
         if not alias['produced']:
             alias['produced'] = alias['created']
@@ -207,23 +233,22 @@ class CitizenHolder(object):
         if not alias:
             return False
 
-        print(alias)
-        #try:
-        if True:
+        try:
             collection = self.get_collection('aliases')
             collection.update({'_id': alias['_id']}, alias, upsert=False)
-        #except:
-        #    return False
+        except:
+            return False
 
         return True
 
     def adjust_alias(self, alias, alias_info):
         parts_scalar = [
             'name_first',
-            'name_flast',
+            'name_last',
             'name_full',
             'time_zone',
             'description',
+            'updated_by'
         ]
 
         parts_vector = [
@@ -235,6 +260,10 @@ class CitizenHolder(object):
             'home_pages'
         ]
 
+        parts_dict = [
+            'config'
+        ]
+
         if type(alias) is not dict:
             return None
 
@@ -242,17 +271,26 @@ class CitizenHolder(object):
             return None
 
         for key in parts_scalar:
-            if (key in alias_info) and alias_info[key]:
+            if (key in alias_info) and (alias_info[key] is not None):
                 alias[key] = alias_info[key]
 
         for key in parts_vector:
-            if (key in alias_info) and alias_info[key]:
+            if (key in alias_info):
                 if type(alias_info[key]) not in [list, tuple]:
                     continue
                 alias[key] = []
                 for one_value in alias_info[key]:
-                    if one_value:
+                    if one_value is not None:
                         alias[key].append(one_value)
+
+        for key in parts_dict:
+            if key in alias_info:
+                if type(alias_info[key]) is not dict:
+                    continue
+                alias[key] = {}
+                for one_key in alias_info[key]:
+                    if alias_info[key][one_key] is not None:
+                        alias[key][one_key] = alias_info[key][one_key]
 
         return alias
 
