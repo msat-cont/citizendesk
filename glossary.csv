@@ -14,3 +14,4 @@
 "twitter stream","a flow of reports coming from twitter"
 "twitter stream filter","the query defining a stream"
 "coverage","a means to group together published reports of a news event. It corresponds to an API endpoint."
+"monitor", "tweeter search updated in real time"
