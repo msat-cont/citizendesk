@@ -83,14 +83,13 @@ def get_sms(phone_number):
 
     feed_type = get_conf('feed_type')
     authority = get_conf('authority')
-    phone_identifier_type = get_conf('phone_identifier_type')
     channel_value_send = get_conf('channel_value_send')
     channel_value_receive = get_conf('channel_value_receive')
 
     sess_spec_sent = {
         'feed_type': feed_type,
         'channels': {'$elemMatch': {'value': channel_value_send}},
-        'recipients': {'$elemMatch': {'authority': authority, 'identifiers': {'type': phone_identifier_type, 'value': phone_number}}}
+        'recipients': {'$elemMatch': {'authority': authority, 'identifiers.user_id': phone_number}}
     }
     res = holder.find_last_session(sess_spec_sent)
     if (type(res) is not dict) or ('produced' not in res):
@@ -101,7 +100,7 @@ def get_sms(phone_number):
     sess_spec_received = {
         'feed_type': feed_type,
         'channels': {'$elemMatch': {'value': channel_value_receive}},
-        'authors': {'$elemMatch': {'authority': authority, 'identifiers': {'type': phone_identifier_type, 'value': phone_number}}}
+        'authors': {'$elemMatch': {'authority': authority, 'identifiers.user_id': phone_number}}
     }
     res = holder.find_last_session(sess_spec_received)
     if (type(res) is not dict) or ('produced' not in res):
