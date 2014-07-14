@@ -7,11 +7,10 @@ MONGODB_SERVER_HOST = 'localhost'
 MONGODB_SERVER_PORT = 27017
 
 DB_NAME = 'citizendesk'
-NEWSTWISTER_URL = 'http://localhost:9054/'
-SMS_CONFIG_PATH = None
+LIVEBLOG_CONFIG_PATH = None
 
 DEFAULT_HOST = 'localhost'
-DEFAULT_PORT = 9060
+DEFAULT_PORT = 9061
 
 import os, sys, datetime, json, logging
 from collections import namedtuple
@@ -84,13 +83,11 @@ def check_client():
 
     logger.info('allowed ' + message)
 
-def prepare_reporting(mongo_addr, dbname, newstwister_url, sms_config_path):
+def prepare_reporting(mongo_addr, dbname, liveblog_config_path):
     from citizendesk.common.utils import get_logger
     from citizendesk.common.dbc import mongo_dbs
     from citizendesk.feeds.config import set_config
-    import citizendesk.feeds.any.dispatch as any_dispatch
-    import citizendesk.feeds.twt.dispatch as twt_dispatch
-    import citizendesk.feeds.sms.dispatch as sms_dispatch
+    import citizendesk.outgest.dispatch as dispatch
 
     logger = get_logger()
 
@@ -98,30 +95,24 @@ def prepare_reporting(mongo_addr, dbname, newstwister_url, sms_config_path):
     DbHolder = namedtuple('DbHolder', 'db')
     mongo_dbs.set_db(DbHolder(db=MongoClient(mongo_addr[0], mongo_addr[1])[mongo_dbs.get_dbname()]))
 
-    set_config('newstwister_url', newstwister_url)
-
-    if sms_config_path:
+    '''
+    if liveblog_config_path:
         try:
-            shf = open(sms_config_path)
-            sms_config_data = shf.read()
-            shf.close()
-            sms_yaml = yaml.load_all(sms_config_data)
-            sms_config = sms_yaml.next()
-            sms_yaml.close()
+            lbhf = open(liveblog_config_path)
+            liveblog_config_data = lbhf.read()
+            lbhf.close()
+            liveblog_yaml = yaml.load_all(liveblog_config_data)
+            liveblog_config = liveblog_yaml.next()
+            liveblog_yaml.close()
         except:
-            logger.error('can not read sms config file: ' + str(sms_config_path))
+            logger.error('can not read liveblog config file: ' + str(liveblog_config_path))
             return False
 
-        if ('gateway_url' in sms_config) and sms_config['gateway_url']:
-            set_config('sms_gateway_url', sms_config['gateway_url'])
-        if ('gateway_key' in sms_config) and sms_config['gateway_key']:
-            set_config('sms_gateway_key', sms_config['gateway_key'])
-        if ('allowed_ips' in sms_config) and sms_config['allowed_ips']:
-            set_config('sms_allowed_ips', sms_config['allowed_ips'])
+        if ('allowed_ips' in liveblog_config) and liveblog_config['allowed_ips']:
+            set_config('liveblog_allowed_ips', liveblog_config['allowed_ips'])
+    '''
 
-    any_dispatch.setup_blueprints(app)
-    twt_dispatch.setup_blueprints(app)
-    sms_dispatch.setup_blueprints(app)
+    dispatch.setup_blueprints(app)
 
     return True
 
@@ -135,11 +126,11 @@ def page_not_found(error):
 
     return 'page not found', 404
 
-def run_flask(dbname, server, mongo, newstwister_url, sms_config_path, debug=False):
+def run_flask(dbname, server, mongo, liveblog_config_path, debug=False):
     from citizendesk.common.utils import get_logger
     logger = get_logger()
 
-    state = prepare_reporting(mongo, dbname, newstwister_url, sms_config_path)
+    state = prepare_reporting(mongo, dbname, liveblog_config_path)
     if not state:
         logger.warning('quiting the feeds daemon for not successful startup')
         return
@@ -155,5 +146,5 @@ if __name__ == '__main__':
     default_mongo = (MONGODB_SERVER_HOST, MONGODB_SERVER_PORT)
 
     setup_logger()
-    run_flask(DB_NAME, server=default_server, mongo=default_mongo, newstwister_url=NEWSTWISTER_URL, sms_config_path=SMS_CONFIG_PATH, debug=True)
+    run_flask(DB_NAME, server=default_server, mongo=default_mongo, liveblog_config_path=LIVEBLOG_CONFIG_PATH, debug=True)
 
