@@ -16,6 +16,7 @@ import urllib
 from citizendesk.common.utils import get_id_value as _get_id_value
 from citizendesk.common.utils import get_boolean as _get_boolean
 from citizendesk.common.utils import get_sort as _get_sort
+from citizendesk.common.utils import get_etag as _get_etag
 from citizendesk.feeds.img.service.storage import collection, schema, FIELD_ACTIVE
 from citizendesk.feeds.img.service.storage import METHOD_CLIENT_GET, SERVICE_IMAGE_TYPE, URL_ENCODED_IMG_LINK
 from citizendesk.feeds.img.service.storage import get_service_by_id, update_service_set
@@ -225,6 +226,8 @@ def do_insert_one(db, service_data):
     if type(service_data['spec']) is not dict:
         return (False, 'wrong spec structure')
 
+    timepoint = datetime.datetime.utcnow()
+
     try:
         service_set = {
             'key': unicode(service_data['key']),
@@ -235,6 +238,9 @@ def do_insert_one(db, service_data):
             'spec': service_data['spec'],
             'notice': '',
             FIELD_ACTIVE: False,
+            '_created': timepoint,
+            '_updated': timepoint,
+            '_etag': _get_etag(),
         }
     except:
         return (False, 'can not setup the service')
@@ -266,7 +272,9 @@ def do_set_active_one(db, service_id, set_active):
         return (False, 'service not found')
     service = service_get[1]
 
-    update_service_set(db, service_id, {FIELD_ACTIVE: set_active})
+    timepoint = datetime.datetime.utcnow()
+
+    update_service_set(db, service_id, {FIELD_ACTIVE: set_active, '_updated': timepoint})
 
     return (True, {'_id': service_id})
 
